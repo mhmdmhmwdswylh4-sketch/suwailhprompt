@@ -1,20 +1,30 @@
 {
-  "name": "webapp",
-  "type": "module",
+  "name": "suwailih-prompt",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "wrangler pages dev",
-    "deploy": "npm run build && wrangler pages deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build --webpack",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "hono": "^4.13.8"
+    "@supabase/supabase-js": "^2.117.2",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
+    "motion": "^14.0.0",
+    "next": "^16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@hono/vite-build": "^1.11.1",
-    "@hono/vite-dev-server": "^0.26.1",
-    "vite": "^8.1.4",
-    "wrangler": "^4.110.0"
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2"
   }
 }

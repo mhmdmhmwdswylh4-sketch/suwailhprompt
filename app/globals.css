@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  @apply bg-ink-950 text-zinc-200 antialiased;
+  overflow-x: hidden;
+  min-height: 100dvh;
+}
+html[lang="ar"] body { font-family: var(--font-arabic), var(--font-inter), system-ui, sans-serif; }
+::selection { background: rgba(124, 242, 181, 0.25); }
+
+@layer components {
+  .glass {
+    @apply border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl;
+  }
+  .btn-primary {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full bg-mint px-6 text-[15px] font-semibold text-ink-950
+           transition-[transform,box-shadow,opacity] duration-200 hover:shadow-[0_0_40px_-6px_rgba(124,242,181,0.55)] active:scale-[0.97]
+           disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+  }
+  .btn-ghost {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full border border-white/15 px-6 text-[15px] font-medium text-zinc-200
+           transition-colors duration-200 hover:border-white/30 hover:bg-white/[0.05] active:scale-[0.97] disabled:opacity-50;
+  }
+  .btn-small {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-medium
+           text-zinc-200 transition-colors hover:bg-white/[0.09] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .field {
+    @apply w-full rounded-xl border border-white/10 bg-ink-900/70 px-4 py-3 text-[16px] text-zinc-100 placeholder:text-zinc-500
+           outline-none transition-colors focus:border-mint/50 focus:ring-2 focus:ring-mint/15;
+  }
+  .container-x { @apply mx-auto w-full max-w-6xl px-5 sm:px-8; }
+  .text-gradient {
+    background: linear-gradient(110deg, #fff 20%, #7cf2b5 55%, #5ad1ff 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+.grain::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
