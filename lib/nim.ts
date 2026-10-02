@@ -54,7 +54,7 @@ function clean(text: string): string {
 export async function engineerPrompt(idea: string, category: Category): Promise<{ prompt: string; mock: boolean }> {
   if (!isNimConfigured()) return { prompt: mockPrompt(idea, category), mock: true };
 
-  const model = process.env.NVIDIA_NIM_MODEL || "meta/llama-3.3-70b-instruct";
+  const model = process.env.NVIDIA_NIM_MODEL || "openai/gpt-oss-20b";
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 55_000);
 
@@ -75,8 +75,10 @@ export async function engineerPrompt(idea: string, category: Category): Promise<
         ],
         temperature: 0.5,
         top_p: 0.9,
-        max_tokens: 2048,
+        max_tokens: 3000,
         stream: false,
+        // gpt-oss models "think" first; keep it short so the answer arrives fast and is never truncated.
+        ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
       }),
     });
     if (!res.ok) throw new NimError(res.status);

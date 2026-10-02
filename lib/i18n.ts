@@ -142,6 +142,10 @@ const en = {
     "auth/popup-closed-by-user": "Sign-in was cancelled.",
     "auth/too-many-requests": "Too many attempts. Try again later.",
     "auth/network-request-failed": "Network error. Check your connection.",
+    "auth/operation-not-allowed": "This sign-in method is not enabled yet. Enable it in Firebase Console > Authentication.",
+    "auth/unauthorized-domain": "This domain is not authorized in Firebase Authentication settings.",
+    "auth/popup-blocked": "The sign-in popup was blocked. Allow popups and try again.",
+    "auth/user-disabled": "This account has been disabled.",
   },
 } as const;
 
@@ -289,6 +293,10 @@ const ar: Dict = {
     "auth/popup-closed-by-user": "تم إلغاء تسجيل الدخول.",
     "auth/too-many-requests": "محاولات كثيرة. حاول لاحقًا.",
     "auth/network-request-failed": "خطأ في الشبكة. تحقق من اتصالك.",
+    "auth/operation-not-allowed": "طريقة تسجيل الدخول هذه غير مفعّلة بعد. فعّلها من Firebase Console > Authentication.",
+    "auth/unauthorized-domain": "هذا النطاق غير مصرّح به في إعدادات Firebase Authentication.",
+    "auth/popup-blocked": "تم حظر نافذة تسجيل الدخول. اسمح بالنوافذ المنبثقة وحاول مجددًا.",
+    "auth/user-disabled": "تم تعطيل هذا الحساب.",
   },
 };
 
