@@ -12,7 +12,6 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import { dictionaries, dirOf, LANG_COOKIE, type Dict, type Lang } from "@/lib/i18n";
-import { getSupabase } from "@/lib/supabase";
 
 /* ---------------- Language ---------------- */
 type LangCtx = { lang: Lang; t: Dict; setLang: (l: Lang) => void; toggle: () => void };
@@ -44,31 +43,6 @@ export function useAuth() {
   return c;
 }
 
-async function bootstrapSession(user: User) {
-  // 1) Verify token on the server and make sure the Supabase role claim exists.
-  try {
-    const token = await user.getIdToken();
-    const res = await fetch("/api/session", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) {
-      const data = (await res.json()) as { refresh?: boolean };
-      if (data.refresh) await user.getIdToken(true);
-    }
-  } catch {
-    /* non-fatal */
-  }
-  // 2) Upsert the profile row (RLS restricts this to the user's own uid).
-  try {
-    const sb = getSupabase();
-    if (!sb) return;
-    await sb.from("profiles").upsert(
-      { name: user.displayName, email: user.email, avatar: user.photoURL },
-      { onConflict: "firebase_uid" },
-    );
-  } catch {
-    /* non-fatal */
-  }
-}
-
 export default function Providers({ initialLang, children }: { initialLang: Lang; children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
   const [user, setUser] = useState<User | null>(null);
@@ -87,7 +61,6 @@ export default function Providers({ initialLang, children }: { initialLang: Lang
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
-      if (u) void bootstrapSession(u);
     });
   }, []);
 

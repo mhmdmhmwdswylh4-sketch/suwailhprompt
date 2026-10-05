@@ -51,13 +51,21 @@ function clean(text: string): string {
     .trim();
 }
 
-export async function engineerPrompt(idea: string, category: Category): Promise<{ prompt: string; mock: boolean }> {
-  if (!isNimConfigured()) return { prompt: mockPrompt(idea, category), mock: true };
+type Delta = { choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[] };
 
-  const model = process.env.NVIDIA_NIM_MODEL || "openai/gpt-oss-20b";
+const models = () => {
+  const primary = process.env.NVIDIA_NIM_MODEL || "openai/gpt-oss-20b";
+  const fallback = process.env.NVIDIA_NIM_FALLBACK_MODEL || "nvidia/nemotron-3.5-lightning-30b-a3b";
+  return primary === fallback ? [primary] : [primary, fallback];
+};
+
+/** Streams answer tokens (reasoning tokens are dropped). Throws NimError before the first token on failure. */
+async function* streamModel(model: string, idea: string, category: Category, signal: AbortSignal, firstTokenMs: number): AsyncGenerator<string> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 55_000);
-
+  const onAbort = () => ctrl.abort();
+  signal.addEventListener("abort", onAbort);
+  let gotToken = false;
+  let ttft: ReturnType<typeof setTimeout> | undefined = setTimeout(() => ctrl.abort(), firstTokenMs);
   try {
     const res = await fetch(NIM_URL, {
       method: "POST",
@@ -65,30 +73,105 @@ export async function engineerPrompt(idea: string, category: Category): Promise<
       headers: {
         Authorization: `Bearer ${process.env.NVIDIA_NIM_API_KEY}`,
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Accept: "text/event-stream",
       },
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: `${BASE_RULES}\n\nCategory: ${category}.\nCategory guidance: ${CATEGORY_FOCUS[category]}` },
+          { role: "system", content: `${BASE_RULES}\n\nLANGUAGE (mandatory): ${/[\u0600-\u06FF]/.test(idea) ? "The idea is in Arabic. Write the ENTIRE prompt in Arabic (including section headings, e.g. الدور، الهدف، السياق، المتطلبات، القيود، المخرجات المتوقعة). Keep only technical terms/code in English." : "Write the entire prompt in the same language as the idea."}\n\nCategory: ${category}.\nCategory guidance: ${CATEGORY_FOCUS[category]}` },
           { role: "user", content: `Rough idea:\n"""\n${idea}\n"""\n\nEngineer the final prompt now.` },
         ],
         temperature: 0.5,
         top_p: 0.9,
-        max_tokens: 3000,
-        stream: false,
-        // gpt-oss models "think" first; keep it short so the answer arrives fast and is never truncated.
+        max_tokens: 3500,
+        stream: true,
         ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
       }),
     });
-    if (!res.ok) throw new NimError(res.status);
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const out = clean(data.choices?.[0]?.message?.content ?? "");
-    if (!out) throw new NimError(502);
-    return { prompt: out, mock: false };
+    if (!res.ok || !res.body) throw new NimError(res.status || 502);
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (payload === "[DONE]") return;
+        let j: Delta;
+        try {
+          j = JSON.parse(payload) as Delta;
+        } catch {
+          continue;
+        }
+        const text = j.choices?.[0]?.delta?.content;
+        if (text) {
+          if (!gotToken) {
+            gotToken = true;
+            clearTimeout(ttft);
+            ttft = undefined;
+          }
+          yield text;
+        }
+      }
+    }
+    if (!gotToken) throw new NimError(502);
+  } catch (e) {
+    if (e instanceof NimError) throw e;
+    // Abort (timeout / client left) or network failure.
+    throw new NimError(gotToken ? 499 : 504);
   } finally {
-    clearTimeout(timer);
+    if (ttft) clearTimeout(ttft);
+    signal.removeEventListener("abort", onAbort);
+    ctrl.abort();
   }
+}
+
+/**
+ * Streams the engineered prompt. Tries the primary model, then the fallback model, but only
+ * switches if the failure happens before any token reached the user (no duplicated output).
+ */
+export async function* engineerStream(idea: string, category: Category, signal: AbortSignal): AsyncGenerator<{ delta?: string; mock?: boolean }> {
+  if (!isNimConfigured()) {
+    const text = mockPrompt(idea, category);
+    for (let i = 0; i < text.length; i += 24) {
+      await new Promise((r) => setTimeout(r, 25));
+      yield { delta: text.slice(i, i + 24), mock: true };
+    }
+    return;
+  }
+  let lastErr: unknown = new NimError(502);
+  const list = models();
+  for (let m = 0; m < list.length; m++) {
+    for (let attempt = 0; attempt < (m === 0 ? 2 : 1); attempt++) {
+      let started = false;
+      try {
+        for await (const d of streamModel(list[m], idea, category, signal, m === 0 ? 30_000 : 40_000)) {
+          started = true;
+          yield { delta: d };
+        }
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (started || signal.aborted) throw e;
+        const status = e instanceof NimError ? e.status : 0;
+        // Do not retry the same model on 4xx other than rate-limit/timeouts.
+        if (status >= 400 && status < 500 && status !== 429 && status !== 408) break;
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+export function cleanOutput(text: string): string {
+  return clean(text);
 }
 
 /** Isolated development fallback, used only when NVIDIA_NIM_API_KEY is missing. */

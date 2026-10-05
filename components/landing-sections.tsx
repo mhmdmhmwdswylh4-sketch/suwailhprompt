@@ -3,17 +3,32 @@
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import FeatureCard from "./feature-card";
+import { Braces, Languages, LayoutGrid, Lock, Sparkles, History as HistoryIcon } from "lucide-react";
+import SpotlightCards from "./ui/spotlight-cards";
+import Marquee from "./ui/marquee";
+import { CATEGORIES } from "@/lib/categories";
 import { Logo } from "./logo";
 import { useLang } from "./providers";
 
-const icons = [
-  <path key="0" d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />,
-  <path key="1" d="M4 6h7v7H4zM13 11h7v7h-7zM13 4h7v5h-7zM4 15h7v3H4z" />,
-  <path key="2" d="M9 9h10v10H9zM5 15V5h10" />,
-  <path key="3" d="M12 7v5l3 2M21 12a9 9 0 11-3-6.7M21 4v5h-5" />,
-  <path key="4" d="M3 5h8M7 3v2M5 9c1.5 3 4 5 7 6M11 5c-.5 4-3 8-7 10M13 21l4-10 4 10M14.5 18h5" />,
-  <path key="5" d="M6 11V8a6 6 0 1112 0v3M5 11h14v9H5z" />,
+const FEATURE_STYLE = [
+  { icon: Sparkles, color: "#7cf2b5" },
+  { icon: LayoutGrid, color: "#5ad1ff" },
+  { icon: Braces, color: "#a78bfa" },
+  { icon: HistoryIcon, color: "#f59e0b" },
+  { icon: Languages, color: "#f472b6" },
+  { icon: Lock, color: "#34d399" },
 ];
+
+export function CategoryMarquee() {
+  const { t } = useLang();
+  const labels = CATEGORIES.map((c) => t.categories[c]);
+  return (
+    <section aria-label={t.engineer.category} className="space-y-3 py-6">
+      <Marquee items={labels} />
+      <Marquee items={[...labels].reverse()} reverse />
+    </section>
+  );
+}
 
 export function Demo() {
   const { t } = useLang();
@@ -87,21 +102,10 @@ export function Features() {
       <h2 id="features-title" className="mx-auto max-w-2xl text-center text-3xl font-semibold tracking-tight text-white sm:text-4xl">
         {t.features.title}
       </h2>
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {t.features.items.map((f, i) => (
-          <FeatureCard
-            key={f.title}
-            index={i}
-            title={f.title}
-            desc={f.desc}
-            icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                {icons[i]}
-              </svg>
-            }
-          />
-        ))}
-      </div>
+      <SpotlightCards
+        className="mt-10"
+        items={t.features.items.map((f, i) => ({ title: f.title, description: f.desc, icon: FEATURE_STYLE[i % FEATURE_STYLE.length].icon, color: FEATURE_STYLE[i % FEATURE_STYLE.length].color }))}
+      />
     </section>
   );
 }

@@ -125,6 +125,7 @@ const en = {
     loading: "Loading your prompts...",
     deleted: "Prompt deleted.",
     retry: "Try again",
+    loadMore: "Load more",
   },
   errors: {
     ai: "AI service is temporarily unavailable. Please try again.",
@@ -133,6 +134,8 @@ const en = {
     network: "Network error. Check your connection and try again.",
     invalid: "Please enter between 3 and 2000 characters.",
     rate: "Too many requests. Please wait a moment.",
+    busy: "We're at peak load right now. Please try again in a few seconds.",
+    limit: "You reached the saved-prompts limit. Delete some to save new ones.",
     generic: "Something went wrong. Please try again.",
     copy: "Couldn't copy to clipboard.",
     "auth/invalid-credential": "Incorrect email or password.",
@@ -276,6 +279,7 @@ const ar: Dict = {
     loading: "جارٍ تحميل برومبتاتك...",
     deleted: "تم حذف البرومبت.",
     retry: "حاول مجددًا",
+    loadMore: "تحميل المزيد",
   },
   errors: {
     ai: "خدمة الذكاء الاصطناعي غير متاحة مؤقتًا. يرجى المحاولة مرة أخرى.",
@@ -284,6 +288,8 @@ const ar: Dict = {
     network: "خطأ في الشبكة. تحقق من اتصالك وحاول مجددًا.",
     invalid: "يرجى إدخال نص بين 3 و 2000 حرف.",
     rate: "طلبات كثيرة. يرجى الانتظار قليلًا.",
+    busy: "الضغط عالٍ حاليًا. حاول مرة أخرى بعد ثوانٍ.",
+    limit: "وصلت للحد الأقصى من البرومبتات المحفوظة. احذف بعضها لحفظ الجديد.",
     generic: "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
     copy: "تعذّر النسخ إلى الحافظة.",
     "auth/invalid-credential": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",

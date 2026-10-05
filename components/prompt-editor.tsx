@@ -7,8 +7,7 @@ import AiOrb, { type OrbState } from "./ai-orb";
 import PromptResult, { type SaveState } from "./prompt-result";
 import { useAuth, useLang } from "./providers";
 import { CATEGORIES, MAX_IDEA_LENGTH, MIN_IDEA_LENGTH, type Category } from "@/lib/categories";
-import { ApiError, callEngineer } from "@/lib/api";
-import { getSupabase } from "@/lib/supabase";
+import { ApiError, savePrompt, streamEngineer } from "@/lib/api";
 
 type Toast = { kind: "error" | "success"; text: string } | null;
 
@@ -27,6 +26,9 @@ export default function PromptEditor() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [toast, setToast] = useState<Toast>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const busy = phase === "working";
   const trimmed = idea.trim();
@@ -52,9 +54,26 @@ export default function PromptEditor() {
       setPhase("working");
       setSaveState("idle");
       setLastRequest(req);
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      let revealed = false;
       try {
         const token = await getToken();
-        const out = await callEngineer(token, req.idea, req.category);
+        const out = await streamEngineer(
+          token,
+          req.idea,
+          req.category,
+          (full) => {
+            // First tokens arrived: show the result live under the orb overlay.
+            setResult(full);
+            if (!revealed) {
+              revealed = true;
+              setStep(3);
+            }
+          },
+          ctrl.signal,
+        );
         setResult(out.prompt);
         setMock(out.mock);
         setStep(3);
@@ -64,13 +83,14 @@ export default function PromptEditor() {
       } catch (e) {
         setPhase("idle");
         const code = e instanceof ApiError ? e.code : e instanceof Error ? e.message : "";
+        if (code === "aborted") return;
         if (code === "auth") {
           setToast({ kind: "error", text: t.errors.auth });
           setTimeout(() => router.replace("/login?next=/engineer"), 1200);
           return;
         }
         const text =
-          code === "ai" ? t.errors.ai : code === "network" ? t.errors.network : code === "rate" ? t.errors.rate : code === "invalid" ? t.errors.invalid : t.errors.generic;
+          code === "ai" ? t.errors.ai : code === "busy" ? t.errors.busy : code === "network" ? t.errors.network : code === "rate" ? t.errors.rate : code === "invalid" ? t.errors.invalid : t.errors.generic;
         setToast({ kind: "error", text });
       }
     },
@@ -87,20 +107,14 @@ export default function PromptEditor() {
     if (!result || !lastRequest || saveState !== "idle") return;
     setSaveState("saving");
     try {
-      const sb = getSupabase();
-      if (!sb) throw new Error("db");
-      await getToken(); // fail fast with "auth" if the session is gone
-      const { error } = await sb.from("prompts").insert({
-        original_prompt: lastRequest.idea,
-        optimized_prompt: result,
-        category: lastRequest.category,
-      });
-      if (error) throw new Error("db");
+      const token = await getToken(); // fails fast with "auth" if the session is gone
+      await savePrompt(token, { original: lastRequest.idea, optimized: result, category: lastRequest.category });
       setSaveState("saved");
       setToast({ kind: "success", text: t.result.saveSuccess });
     } catch (e) {
       setSaveState("idle");
-      setToast({ kind: "error", text: e instanceof Error && e.message === "auth" ? t.errors.auth : t.errors.db });
+      const code = e instanceof ApiError ? e.code : e instanceof Error ? e.message : "";
+      setToast({ kind: "error", text: code === "auth" ? t.errors.auth : code === "rate" ? t.errors.rate : code === "limit" ? t.errors.limit : t.errors.db });
     }
   };
 

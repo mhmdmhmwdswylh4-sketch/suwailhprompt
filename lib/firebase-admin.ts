@@ -35,8 +35,3 @@ export async function verifyRequest(req: Request): Promise<DecodedIdToken> {
     throw new AuthError("invalid token");
   }
 }
-
-/** Marks the user as `role: authenticated` so Supabase's third-party auth accepts the JWT. */
-export async function ensureSupabaseRole(uid: string) {
-  await getAuth(getAdminApp()).setCustomUserClaims(uid, { role: "authenticated" });
-}

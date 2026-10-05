@@ -4,6 +4,8 @@ import { Inter, IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers";
 import Navbar from "@/components/navbar";
+import Aurora from "@/components/ui/aurora";
+import ScrollProgress from "@/components/ui/scroll-progress";
 import { dirOf, isLang, LANG_COOKIE, type Lang } from "@/lib/i18n";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -33,6 +35,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={lang} dir={dirOf(lang)} className={`${inter.variable} ${arabic.variable}`}>
       <body className="font-sans">
         <Providers initialLang={lang}>
+          <Aurora />
+          <ScrollProgress />
           <Navbar />
           {children}
         </Providers>

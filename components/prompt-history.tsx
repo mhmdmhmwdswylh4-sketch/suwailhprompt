@@ -5,14 +5,17 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import CopyButton from "./copy-button";
 import PromptText from "./prompt-text";
-import { useLang } from "./providers";
-import { getSupabase, type SavedPrompt } from "@/lib/supabase";
+import { useAuth, useLang } from "./providers";
+import { ApiError, deletePrompt, listPrompts, type SavedPrompt } from "@/lib/api";
 import type { Category } from "@/lib/categories";
 
 type Status = "loading" | "ready" | "error";
 
 export default function PromptHistory() {
   const { t, lang } = useLang();
+  const { getToken } = useAuth();
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const [items, setItems] = useState<SavedPrompt[]>([]);
   const [status, setStatus] = useState<Status>("loading");
   const [open, setOpen] = useState<SavedPrompt | null>(null);
@@ -23,20 +26,28 @@ export default function PromptHistory() {
   const load = useCallback(async () => {
     setStatus("loading");
     try {
-      const sb = getSupabase();
-      if (!sb) throw new Error("db");
-      const { data, error } = await sb
-        .from("prompts")
-        .select("id, original_prompt, optimized_prompt, category, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      setItems((data ?? []) as SavedPrompt[]);
+      const out = await listPrompts(await getToken());
+      setItems(out.items);
+      setCursor(out.nextCursor);
       setStatus("ready");
     } catch {
       setStatus("error");
     }
-  }, []);
+  }, [getToken]);
+
+  const loadMore = async () => {
+    if (!cursor || more) return;
+    setMore(true);
+    try {
+      const out = await listPrompts(await getToken(), cursor);
+      setItems((xs) => [...xs, ...out.items.filter((n) => !xs.some((x) => x.id === n.id))]);
+      setCursor(out.nextCursor);
+    } catch {
+      setMsg({ kind: "error", text: t.errors.db });
+    } finally {
+      setMore(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -51,16 +62,13 @@ export default function PromptHistory() {
   const remove = async (id: string) => {
     setDeletingId(id);
     try {
-      const sb = getSupabase();
-      if (!sb) throw new Error("db");
-      const { error } = await sb.from("prompts").delete().eq("id", id);
-      if (error) throw error;
+      await deletePrompt(await getToken(), id);
       setItems((xs) => xs.filter((x) => x.id !== id));
       setConfirmId(null);
       setOpen((o) => (o?.id === id ? null : o));
       setMsg({ kind: "success", text: t.history.deleted });
-    } catch {
-      setMsg({ kind: "error", text: t.errors.db });
+    } catch (e) {
+      setMsg({ kind: "error", text: e instanceof ApiError && e.code === "rate" ? t.errors.rate : t.errors.db });
     } finally {
       setDeletingId(null);
     }
@@ -149,6 +157,14 @@ export default function PromptHistory() {
           ))}
         </AnimatePresence>
       </ul>
+
+      {cursor && (
+        <div className="mt-6 flex justify-center">
+          <button className="btn-small" onClick={loadMore} disabled={more}>
+            {more ? t.history.loading : t.history.loadMore}
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {open && (
