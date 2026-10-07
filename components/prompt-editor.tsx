@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AiOrb, { type OrbState } from "./ai-orb";
+import ModelPicker, { type ModelSelection } from "./model-picker";
 import PromptResult, { type SaveState } from "./prompt-result";
 import { useAuth, useLang } from "./providers";
 import { CATEGORIES, MAX_IDEA_LENGTH, MIN_IDEA_LENGTH, type Category } from "@/lib/categories";
@@ -25,6 +26,8 @@ export default function PromptEditor() {
   const [mock, setMock] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [toast, setToast] = useState<Toast>(null);
+  const [sel, setSel] = useState<ModelSelection>({ provider: "nvidia", model: "openai/gpt-oss-20b", ready: true });
+  const onSel = useCallback((s: ModelSelection) => setSel(s), []);
   const resultRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -32,7 +35,7 @@ export default function PromptEditor() {
 
   const busy = phase === "working";
   const trimmed = idea.trim();
-  const valid = trimmed.length >= MIN_IDEA_LENGTH && trimmed.length <= MAX_IDEA_LENGTH;
+  const valid = trimmed.length >= MIN_IDEA_LENGTH && trimmed.length <= MAX_IDEA_LENGTH && sel.ready;
 
   // Advance the 4 visual stages while the request is in flight (the last one waits for the response).
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function PromptEditor() {
             }
           },
           ctrl.signal,
+          { provider: sel.provider, model: sel.model, apiKey: sel.apiKey },
         );
         setResult(out.prompt);
         setMock(out.mock);
@@ -90,11 +94,11 @@ export default function PromptEditor() {
           return;
         }
         const text =
-          code === "ai" ? t.errors.ai : code === "busy" ? t.errors.busy : code === "network" ? t.errors.network : code === "rate" ? t.errors.rate : code === "invalid" ? t.errors.invalid : t.errors.generic;
+          code === "ai" ? t.errors.ai : code === "busy" ? t.errors.busy : code === "key" ? t.errors.key : code === "key_missing" ? t.errors.key_missing : code === "model" ? t.errors.model : code === "provider_rate" ? t.errors.provider_rate : code === "network" ? t.errors.network : code === "rate" ? t.errors.rate : code === "invalid" ? t.errors.invalid : t.errors.generic;
         setToast({ kind: "error", text });
       }
     },
-    [getToken, router, t],
+    [getToken, router, t, sel],
   );
 
   const submit = (e: React.FormEvent) => {
@@ -159,6 +163,8 @@ export default function PromptEditor() {
             ))}
           </div>
         </fieldset>
+
+        <ModelPicker onChange={onSel} disabled={busy} />
 
         <button type="submit" disabled={!valid || busy} className="btn-primary mt-5 w-full sm:w-auto">
           {busy ? t.engineer.working : t.engineer.button}

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { AuthError, verifyRequest } from "@/lib/firebase-admin";
-import { engineerStream, NimError } from "@/lib/nim";
+import { engineerStream } from "@/lib/nim";
+import { errorCode } from "@/lib/llm";
+import { getProvider, isValidApiKey, isValidModelId, KEY_HEADER, PROVIDERS } from "@/lib/providers";
 import { isCategory, MAX_IDEA_LENGTH, MIN_IDEA_LENGTH } from "@/lib/categories";
 import { rateLimit } from "@/lib/rate-limit";
 import { acquire } from "@/lib/limiter";
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
 
   if (!rateLimit(`u:${uid}`, 10)) return fail("rate", 429, { "Retry-After": "60" });
 
-  let body: { idea?: unknown; category?: unknown };
+  let body: { idea?: unknown; category?: unknown; provider?: unknown; model?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -45,6 +47,24 @@ export async function POST(req: Request) {
   const idea = typeof body.idea === "string" ? body.idea.trim() : "";
   if (idea.length < MIN_IDEA_LENGTH || idea.length > MAX_IDEA_LENGTH) return fail("invalid", 400);
   const category = isCategory(body.category) ? body.category : "general";
+
+  // ---- provider / model selection -------------------------------------------------------------
+  // The client may only pick a provider ID from our allowlist (never a URL). A user-supplied API key is read
+  // from a request header, kept in a local variable for this one request, and never stored, logged or echoed.
+  const provider = getProvider(body.provider ?? "nvidia");
+  if (!provider) return fail("invalid", 400);
+  const nvidiaAllowed = PROVIDERS[0].models.map((m) => m.id);
+  const model = typeof body.model === "string" && body.model ? body.model : provider.models[0].id;
+  if (!isValidModelId(model)) return fail("model", 400);
+  if (provider.id === "nvidia" && !nvidiaAllowed.includes(model)) return fail("model", 400); // server pays: allowlist only
+
+  let userKey: string | undefined;
+  if (provider.needsKey) {
+    const k = req.headers.get(KEY_HEADER);
+    if (!k) return fail("key_missing", 400);
+    if (!isValidApiKey(k)) return fail("key", 400);
+    userKey = k;
+  }
 
   const release = await acquire();
   if (!release) return fail("busy", 503, { "Retry-After": "5" });
@@ -58,7 +78,7 @@ export async function POST(req: Request) {
       const send = (o: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
       let sentMock = false;
       try {
-        for await (const chunk of engineerStream(idea, category, ctrl.signal)) {
+        for await (const chunk of engineerStream(idea, category, ctrl.signal, { provider: provider.id, model, userKey })) {
           if (chunk.mock && !sentMock) {
             sentMock = true;
             send({ mock: true });
@@ -67,9 +87,11 @@ export async function POST(req: Request) {
         }
         send({ done: true });
       } catch (e) {
-        console.error("[engineer] failure", e instanceof NimError ? e.status : "unknown");
+        // Log ONLY provider id + error class. Never the key, headers, request body or upstream response.
+        const code = errorCode(e);
+        console.error("[engineer] failure", provider.id, code);
         try {
-          send({ error: "ai" });
+          send({ error: code });
         } catch {
           /* client gone */
         }
@@ -91,6 +113,7 @@ export async function POST(req: Request) {
 
   return new Response(stream, {
     headers: {
+      "Referrer-Policy": "no-referrer",
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-store, no-transform",
       Connection: "keep-alive",

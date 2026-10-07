@@ -1,6 +1,6 @@
 # SUWAILIH PROMPT
 
-Engineer Better Prompts. Get Better AI Results. — turns a rough idea into a structured, ready-to-use prompt using **NVIDIA NIM**.
+Engineer Better Prompts. Get Better AI Results. — turns a rough idea into a structured, ready-to-use prompt using **NVIDIA NIM** (free, server-paid) **or your own AI provider key** (OpenAI, Anthropic, Gemini, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Cerebras).
 
 ## Stack
 Next.js 16 (App Router, webpack build) · React 19 · TypeScript · Tailwind 3 · Motion · Firebase Auth · Supabase Postgres · NVIDIA NIM.
@@ -12,12 +12,32 @@ Browser ──(Firebase ID token)──► Next.js API routes ──► NVIDIA N
 ```
 - **Auth:** Firebase (Google + Email/Password). Every API route verifies the ID token server-side with `firebase-admin`.
 - **Database:** all reads/writes go through `/api/prompts`. The user id comes ONLY from the verified token, never from the client. The service-role key is server-only. RLS is enabled on both tables as defense-in-depth (the publishable key can't read or write — verified). *Supabase "Third-party Auth → Firebase" is therefore **not required**.*
-- **AI:** `/api/engineer` streams tokens (SSE). Primary `openai/gpt-oss-20b` (low reasoning), automatic retry then fallback `nvidia/nemotron-3.5-lightning-30b-a3b` if no token was produced. Arabic ideas produce Arabic prompts.
+- **AI:** `/api/engineer` streams tokens (SSE). Default NVIDIA `openai/gpt-oss-20b` (low reasoning), automatic retry then fallback `nvidia/nemotron-3-super-120b-a12b` if no token was produced. Arabic ideas produce Arabic prompts.
+
+## Models & providers (bring your own key)
+The Engineer page has an **AI model** panel: pick a provider, a preset model or **Custom model…** (any model id the provider offers), and paste your own API key.
+
+| Provider | Kind | Key needed |
+|---|---|---|
+| NVIDIA NIM (`gpt-oss-20b`, `nemotron-3-super-120b`) | OpenAI-compatible | No (server-paid, allowlisted models) |
+| OpenAI, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Cerebras | OpenAI-compatible | Yes |
+| Anthropic (Claude) | Messages API | Yes |
+| Google Gemini | `streamGenerateContent` | Yes |
+
+### How user keys are protected (never leaked)
+- The browser sends **only a provider id** — never a URL. Endpoints are a fixed server-side allowlist (no SSRF). Model ids are validated (`^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,119}$`, no `..`).
+- The key travels **only** in the `x-user-api-key` request header to our own `/api/engineer` (never URL / query / body / cookie), over HTTPS.
+- Server keeps it in a local variable for the single request: **never stored in the DB, never logged** (logs contain only `provider + error code`), never echoed back.
+- Upstream is called with `redirect: "error"`; upstream error bodies are **never forwarded** to the client (only classified into `key` / `model` / generic).
+- Gemini key is sent in the `x-goog-api-key` header, not in the URL.
+- Client: key lives in **React memory only** by default (gone on refresh). Only if the user ticks **Remember on this device** is it kept in `localStorage` of that browser (untick = deleted). Non-secret prefs (provider/model) are stored separately. Inputs use `autocomplete=off`, `referrerPolicy=no-referrer`, `cache: no-store`.
+- Strict **CSP** (`connect-src 'self'` + Firebase/Google only) so injected scripts can't ship a key to a third-party host.
+- Verified with canary-key tests against all 10 real providers: 0 occurrences in responses, headers or server logs.
 
 ## Endpoints
 | Route | Purpose |
 |---|---|
-| `POST /api/engineer` `{idea, category}` | SSE stream: `{"d":"…"}`, `{"mock":true}`, `{"done":true}`, `{"error":"ai"}` |
+| `POST /api/engineer` `{idea, category, provider?, model?}` + header `x-user-api-key` (non-NVIDIA) | SSE stream: `{"d":"…"}`, `{"mock":true}`, `{"done":true}`, `{"error":"ai\|key\|key_missing\|model\|provider_rate\|invalid\|busy\|rate\|auth"}` |
 | `GET /api/prompts?limit=20&before=<iso>` | own history, cursor pagination |
 | `POST /api/prompts` `{original, optimized, category}` | save (max 1000 per user) |
 | `DELETE /api/prompts?id=<uuid>` | delete own row only |
@@ -47,4 +67,4 @@ In Firebase Console add your production domain to **Authentication → Settings 
 Import the repo, add the env vars above, deploy. (`maxDuration = 60` on `/api/engineer`.)
 
 ## Security notes
-No secrets in client code; input validated and length-limited; output rendered as text (no `dangerouslySetInnerHTML`); security headers in `next.config.ts`; errors are generic. **Rotate any key that was pasted into chat** (Firebase service account, NVIDIA key, Supabase service-role).
+No secrets in client code; input validated and length-limited; output rendered as text (no `dangerouslySetInnerHTML`); security headers in `next.config.ts`; errors are generic. User-supplied keys are never persisted server-side (see above). **Rotate any key that was pasted into chat** (Firebase service account, NVIDIA key, Supabase service-role).

@@ -40,10 +40,20 @@ export async function streamEngineer(
   category: string,
   onText: (full: string) => void,
   signal?: AbortSignal,
+  sel?: { provider: string; model: string; apiKey?: string },
 ): Promise<{ prompt: string; mock: boolean }> {
   let res: Response;
   try {
-    res = await fetch("/api/engineer", { method: "POST", headers: authHeaders(token, true), body: JSON.stringify({ idea, category }), signal });
+    const headers: Record<string, string> = { ...(authHeaders(token, true) as Record<string, string>) };
+    if (sel?.apiKey) headers["x-user-api-key"] = sel.apiKey; // header only: never in the URL, body, storage-synced state or logs
+    res = await fetch("/api/engineer", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ idea, category, provider: sel?.provider, model: sel?.model }),
+      signal,
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+    });
   } catch {
     throw new ApiError("network");
   }
